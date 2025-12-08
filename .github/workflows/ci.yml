@@ -144,15 +144,40 @@ jobs:
         docker build -t notes-app:${{ github.sha }} .
         docker build -t notes-app:latest .
     
+    - name: Start MySQL for Docker test
+      run: |
+        docker network create test-network
+        docker run -d --name mysql-test \
+          --network test-network \
+          -e MYSQL_ROOT_PASSWORD=password \
+          -e MYSQL_DATABASE=notes_app \
+          mysql:8.0
+        
+        # Wait for MySQL to be ready
+        echo "Waiting for MySQL to be ready..."
+        for i in {1..30}; do
+          if docker exec mysql-test mysqladmin ping -h localhost --silent; then
+            echo "MySQL is ready!"
+            break
+          fi
+          echo "Waiting for MySQL... ($i/30)"
+          sleep 2
+        done
+    
     - name: Test Docker container
       run: |
         docker run -d --name test-container \
+          --network test-network \
           -p 3000:3000 \
           -e NODE_ENV=production \
+          -e DB_HOST=mysql-test \
+          -e DB_USER=root \
+          -e DB_PASSWORD=password \
+          -e DB_NAME=notes_app \
           notes-app:latest
         
         # Wait for container to start
-        sleep 20
+        sleep 10
         
         # Test health endpoint
         for i in {1..30}; do
@@ -168,8 +193,9 @@ jobs:
         docker logs test-container
         
         # Cleanup
-        docker stop test-container
-        docker rm test-container
+        docker stop test-container mysql-test
+        docker rm test-container mysql-test
+        docker network rm test-network
 
   performance:
     name: Performance Test
