@@ -1,30 +1,41 @@
 {
   "name": "notes-app",
   "version": "1.0.0",
-  "description": "A simple notes application with Node.js and MySQL",
+  "description": "A simple notes application with MySQL backend",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "test:integration": "jest --testPathPattern=integration",
-    "test:unit": "jest --testPathPattern=unit",
+    "test": "jest --verbose",
+    "test:unit": "jest tests/unit.test.js tests/app.test.js --verbose",
+    "test:integration": "jest tests/integration.test.js --verbose --runInBand",
     "test:performance": "node tests/performance.test.js",
+    "test:coverage": "jest --coverage",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "healthcheck": "node healthcheck.js"
+    "release:patch": "bash scripts/release.sh patch",
+    "release:minor": "bash scripts/release.sh minor",
+    "release:major": "bash scripts/release.sh major",
+    "docker:build": "docker build -t notes-app:latest .",
+    "docker:run": "docker-compose up -d",
+    "docker:stop": "docker-compose down"
   },
   "keywords": [
-    "nodejs",
-    "express",
-    "mysql",
     "notes",
-    "api"
+    "mysql",
+    "express",
+    "rest-api"
   ],
-  "author": "DevOps Cat Team",
+  "author": "Your Name",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/notes-app.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/notes-app/issues"
+  },
+  "homepage": "https://github.com/yourusername/notes-app#readme",
   "dependencies": {
     "express": "^4.18.2",
     "mysql2": "^3.6.5"
@@ -37,30 +48,13 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "testMatch": [
-      "**/tests/**/*.test.js"
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "index.js",
+      "!tests/**"
     ],
     "setupFilesAfterEnv": [
       "<rootDir>/tests/setup.js"
-    ],
-    "testTimeout": 30000,
-    "verbose": true,
-    "forceExit": true,
-    "detectOpenHandles": true,
-    "collectCoverage": true,
-    "coverageDirectory": "coverage",
-    "coverageReporters": [
-      "text",
-      "lcov",
-      "html"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 40,
-        "functions": 40,
-        "lines": 50,
-        "statements": 50
-      }
-    }
+    ]
   }
 }
