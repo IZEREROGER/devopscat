@@ -1,6 +1,6 @@
 # Notes App 📝
 
-A production-ready notes application with MySQL backend, complete CI/CD pipeline, and Docker support.
+A production-ready notes application with MySQL backend, complete CI/CD pipeline, Docker support, and automated releases.
 
 ## 🚀 Quick Start
 
@@ -46,30 +46,94 @@ npm run dev
 open http://localhost:3000
 ```
 
+## 📦 Available Versions
+
+Check [GitHub Releases](https://github.com/yourusername/notes-app/releases) for all versions.
+
+| Version | Release Date | Docker Tags | Notes |
+|---------|--------------|-------------|-------|
+| 1.0.0 | TBD | `v1.0.0`, `1.0`, `1`, `latest` | Initial release |
+
 ## 🔄 Release Process
 
-### Prerequisites
+### Automated Release (Recommended)
 
-1. **Docker Hub Account**: Sign up at https://hub.docker.com
-2. **GitHub Secrets Configured**: 
-   - `DOCKER_USERNAME`: Your Docker Hub username
-   - `DOCKER_PASSWORD`: Your Docker Hub password/token
-3. **Git configured** with push access to main branch
+The project includes automated release workflows that handle:
+- ✅ Version bumping
+- ✅ Git tagging
+- ✅ CI/CD testing
+- ✅ Docker image building & publishing
+- ✅ GitHub Release creation
+- ✅ Changelog generation
 
-### Quick Release
+#### Step 1: Prerequisites
+
+1. **Configure GitHub Secrets** (Settings → Secrets and variables → Actions):
+   ```
+   DOCKER_USERNAME: your-dockerhub-username
+   DOCKER_PASSWORD: your-dockerhub-token
+   ```
+
+2. **Ensure you're on main branch**:
+   ```bash
+   git checkout main
+   git pull origin main
+   ```
+
+#### Step 2: Create Release
 
 ```bash
-# Ensure you're on main branch with all changes committed
-git checkout main
-git pull origin main
+# For patch releases (bug fixes: 1.0.0 → 1.0.1)
+npm run release:patch
 
-# Create and push a release tag
-npm run release:patch   # For bug fixes (1.0.0 → 1.0.1)
-npm run release:minor   # For new features (1.0.0 → 1.1.0)
-npm run release:major   # For breaking changes (1.0.0 → 2.0.0)
+# For minor releases (new features: 1.0.0 → 1.1.0)
+npm run release:minor
+
+# For major releases (breaking changes: 1.0.0 → 2.0.0)
+npm run release:major
 ```
 
-### Manual Release Process
+#### Step 3: What Happens Automatically
+
+1. **Local Script (`release.sh`)**:
+   - ✅ Validates you're on main branch
+   - ✅ Checks for uncommitted changes
+   - ✅ Bumps version in `package.json`
+   - ✅ Creates git commit: `chore: bump version to X.X.X`
+   - ✅ Creates git tag: `vX.X.X`
+   - ✅ Pushes to GitHub
+
+2. **GitHub Actions Release Workflow** (triggered by tag push):
+   - ✅ Runs complete CI test suite
+   - ✅ Builds Docker images with multiple tags:
+     - `yourusername/notes-app:1.0.0` (exact version)
+     - `yourusername/notes-app:1.0` (minor version)
+     - `yourusername/notes-app:1` (major version)
+     - `yourusername/notes-app:latest`
+   - ✅ Pushes images to Docker Hub
+   - ✅ Generates changelog from git commits
+   - ✅ Creates GitHub Release with:
+     - Changelog
+     - Docker pull commands
+     - Deployment instructions
+   - ✅ Sends Slack notification (if configured)
+
+#### Step 4: Monitor Release
+
+```bash
+# View the release workflow
+# Go to: https://github.com/yourusername/notes-app/actions
+
+# Check Docker Hub
+docker pull yourusername/notes-app:latest
+
+# View GitHub Release
+# Go to: https://github.com/yourusername/notes-app/releases
+```
+
+### Manual Release (Alternative)
+
+If you need to create a release manually:
 
 ```bash
 # 1. Update version
@@ -79,115 +143,64 @@ npm version patch  # or minor, or major
 git push origin main --tags
 
 # 3. GitHub Actions will automatically:
-#    - Run all tests
-#    - Build Docker images
-#    - Push to Docker Hub with version and latest tags
-#    - Create GitHub Release with changelog
-#    - Notify team via Slack (if configured)
+#    - Run CI tests
+#    - Build and push Docker images
+#    - Create GitHub Release
 ```
 
-### What Happens During Release?
+### Release Workflow Details
 
-1. **Tag Detection**: GitHub Actions detects the version tag (e.g., `v1.0.0`)
-2. **Testing**: Runs all unit tests to ensure quality
-3. **Docker Build**: Builds multi-architecture Docker images
-4. **Docker Push**: Pushes images to Docker Hub:
-   - Version tag: `yourusername/notes-app:1.0.0`
-   - Latest tag: `yourusername/notes-app:latest`
-5. **GitHub Release**: Creates release with:
-   - Auto-generated changelog
-   - Docker pull commands
-   - Deployment instructions
-6. **Notifications**: Sends Slack notification (if configured)
+The release process is handled by two GitHub Actions workflows:
 
-### Release Artifacts
+**1. CI Workflow (`.github/workflows/ci.yml`)**
+- Runs on: Push to main/develop, Pull Requests
+- Steps: Lint → Test → Security → Build → Performance
+- Can be called by other workflows
 
-Each release creates:
-- Docker images on Docker Hub
-- GitHub Release with changelog
-- Git tag in repository
-- Release notes document
+**2. Release Workflow (`.github/workflows/release.yml`)**
+- Runs on: Git tags matching `v*` (e.g., `v1.0.0`)
+- Steps:
+  1. Calls CI workflow (ensures all tests pass)
+  2. Builds multi-tagged Docker images
+  3. Pushes to Docker Hub
+  4. Creates GitHub Release with changelog
+  5. Notifies team
 
-### Verifying a Release
+### Docker Image Tags
+
+Each release creates multiple Docker tags for flexibility:
 
 ```bash
-# Check Docker Hub
+# Specific version (recommended for production)
 docker pull yourusername/notes-app:1.0.0
+
+# Minor version (gets patch updates)
+docker pull yourusername/notes-app:1.0
+
+# Major version (gets minor and patch updates)
+docker pull yourusername/notes-app:1
+
+# Latest (always latest release)
 docker pull yourusername/notes-app:latest
-
-# Run the release
-docker run -d -p 3000:3000 \
-  -e DB_HOST=localhost \
-  -e DB_USER=root \
-  -e DB_PASSWORD=password \
-  -e DB_NAME=notes_app \
-  yourusername/notes-app:1.0.0
-
-# Test the application
-curl http://localhost:3000/health
 ```
 
-### Troubleshooting Releases
+### Rollback a Release
 
-**Release workflow not triggering?**
+If you need to rollback:
+
 ```bash
-# Ensure tag starts with 'v'
-git tag v1.0.0
-git push origin v1.0.0
-
-# Check GitHub Actions tab for workflow runs
-```
-
-**Docker push failing?**
-```bash
-# Verify secrets in GitHub Settings
-# Settings → Secrets and variables → Actions
-# Required: DOCKER_USERNAME, DOCKER_PASSWORD
-```
-
-**Need to redo a release?**
-```bash
-# Delete remote tag
-git push --delete origin v1.0.0
-
-# Delete local tag
+# Delete the git tag locally
 git tag -d v1.0.0
 
-# Create new tag
-git tag v1.0.0
-git push origin v1.0.0
+# Delete the git tag remotely
+git push --delete origin v1.0.0
+
+# Delete GitHub Release (via web UI)
+# Go to: Releases → Select release → Delete
+
+# Delete Docker Hub tags (via web UI)
+# Go to: Docker Hub → Repository → Tags → Delete
 ```
-
-### Version History
-
-| Version | Date | Docker Tags | Notes |
-|---------|------|-------------|-------|
-| 1.0.0 | TBD | `1.0.0`, `latest` | Initial release |
-
-View all releases: [GitHub Releases](https://github.com/yourusername/notes-app/releases)
-
-## 📦 Available Versions
-
-```bash
-# Pull specific version
-docker pull your-dockerhub-username/notes-app:1.0.0
-
-# Pull latest version
-docker pull your-dockerhub-username/notes-app:latest
-```
-
-See [Releases](https://github.com/your-username/notes-app/releases) for full changelog.
-
-## 🔐 Security
-
-- Security scanning with Snyk
-- Automated dependency updates
-- Regular security audits
-- See [SECURITY.md](./SECURITY.md) for vulnerability reporting
-
-## 📝 Environment Variables
-
-See [env.md](./env.md) for complete environment variable documentation.
 
 ## 🧪 Testing
 
@@ -203,6 +216,76 @@ npm run test:performance
 # Generate coverage report
 npm run test:coverage
 ```
+
+## 📝 Environment Variables
+
+See [env.md](./env.md) for complete environment variable documentation.
+
+### Required Variables
+
+```bash
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=notes_app
+```
+
+### Optional Variables
+
+```bash
+NODE_ENV=production
+PORT=3000
+LOG_LEVEL=info
+```
+
+## 🏗️ Architecture
+
+The application follows a microservices architecture with the following components:
+
+- **API Gateway**: Nginx reverse proxy for routing
+- **Auth Service**: Handles user authentication
+- **Notes Service**: Manages notes CRUD operations
+- **Database**: MySQL for persistent storage
+- **Cache**: Redis for caching frequently accessed data
+
+### Sequence Diagram
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant G as API Gateway
+  participant A as Auth Service
+  participant N as Notes Service
+  participant DB as Database
+
+  C->>G: HTTP Request
+  G->>A: Forward to Auth Service
+  A->>G: Auth Token
+  G->>N: Forward to Notes Service
+  N->>DB: SQL Query
+  DB-->>N: Query Result
+  N-->>G: Notes Data
+  G-->>C: HTTP Response
+```
+
+### Deployment Diagram
+
+```mermaid
+graph TD;
+  A[API Gateway] -->|Routes to| B(Auth Service);
+  A -->|Routes to| C(Notes Service);
+  B --> D{MySQL Database};
+  C --> D;
+  D -->|Replicated to| E[Read Replica];
+  E -->|Backed up to| F[Amazon S3];
+```
+
+## 🔐 Security
+
+- Security scanning with Snyk
+- Automated dependency updates
+- Regular security audits
+- See [SECURITY.md](./SECURITY.md) for vulnerability reporting
 
 ## 📚 Documentation
 
