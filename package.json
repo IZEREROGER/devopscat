@@ -15,23 +15,6 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
-  "jest": {
-    "testEnvironment": "node",
-    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
-    "collectCoverageFrom": [
-      "*.js",
-      "!tests/**",
-      "!coverage/**",
-      "!node_modules/**"
-    ],
-    "coverageDirectory": "coverage",
-    "coverageReporters": [
-      "text",
-      "lcov",
-      "html"
-    ],
-    "testTimeout": 30000
-  },
   "dependencies": {
     "express": "^4.18.2",
     "mysql2": "^3.6.5"
