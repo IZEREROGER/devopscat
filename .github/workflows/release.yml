@@ -44,11 +44,8 @@ jobs:
       env:
         NODE_ENV: test
     
-    - name: Build Docker image
-      run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }} .
-        docker tag ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }} \
-                   ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
     
     - name: Login to Docker Hub
       uses: docker/login-action@v3
@@ -56,10 +53,26 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
     
-    - name: Push Docker images
-      run: |
-        docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}
-        docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=raw,value=latest
+    
+    - name: Build and push Docker images
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
     
     - name: Generate changelog
       id: changelog
@@ -67,19 +80,42 @@ jobs:
         PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
         
         if [ -n "$PREV_TAG" ]; then
-          echo "## Changes" > CHANGELOG.md
-          git log $PREV_TAG..HEAD --pretty=format:"- %s (%h)" >> CHANGELOG.md
+          echo "## 🚀 What's Changed" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          git log $PREV_TAG..HEAD --pretty=format:"- %s (%h) by @%an" >> CHANGELOG.md
         else
-          echo "## Initial Release" > CHANGELOG.md
-          git log --pretty=format:"- %s (%h)" >> CHANGELOG.md
+          echo "## 🎉 Initial Release" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          git log --pretty=format:"- %s (%h) by @%an" >> CHANGELOG.md
         fi
         
         echo "" >> CHANGELOG.md
-        echo "## Docker Images" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "## 🐳 Docker Images" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
         echo "\`\`\`bash" >> CHANGELOG.md
+        echo "# Pull by version tag" >> CHANGELOG.md
         echo "docker pull ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "# Pull latest" >> CHANGELOG.md
         echo "docker pull ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest" >> CHANGELOG.md
         echo "\`\`\`" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "## 📦 Deployment" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "\`\`\`bash" >> CHANGELOG.md
+        echo "docker run -d -p 3000:3000 \\" >> CHANGELOG.md
+        echo "  -e DB_HOST=your-db-host \\" >> CHANGELOG.md
+        echo "  -e DB_USER=your-db-user \\" >> CHANGELOG.md
+        echo "  -e DB_PASSWORD=your-db-password \\" >> CHANGELOG.md
+        echo "  -e DB_NAME=notes_app \\" >> CHANGELOG.md
+        echo "  ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}" >> CHANGELOG.md
+        echo "\`\`\`" >> CHANGELOG.md
+        
+        if [ -n "$PREV_TAG" ]; then
+          echo "" >> CHANGELOG.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...v${{ steps.get_version.outputs.VERSION }}" >> CHANGELOG.md
+        fi
     
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
@@ -90,22 +126,38 @@ jobs:
         files: |
           package.json
           package-lock.json
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Notify Slack
-      if: success()
+      if: success() && secrets.SLACK_WEBHOOK_URL != ''
       uses: 8398a7/action-slack@v3
       with:
         status: success
         channel: '#releases'
-        message: |
-          🚀 New Release: v${{ steps.get_version.outputs.VERSION }}
+        text: |
+          🚀 *New Release: v${{ steps.get_version.outputs.VERSION }}*
           
-          **Docker Images:**
-          - `${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}`
-          - `${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest`
+          *Docker Images:*
+          • `${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}`
+          • `${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest`
           
-          **Release Notes:** https://github.com/${{ github.repository }}/releases/tag/v${{ steps.get_version.outputs.VERSION }}
+          *Release Notes:* https://github.com/${{ github.repository }}/releases/tag/v${{ steps.get_version.outputs.VERSION }}
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    
+    - name: Comment on related PRs
+      if: success()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const version = '${{ steps.get_version.outputs.VERSION }}';
+          const dockerImage = '${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:' + version;
+          
+          const comment = `🚀 This PR was included in release [v${version}](https://github.com/${{ github.repository }}/releases/tag/v${version})
+          
+          Docker Image: \`${dockerImage}\``;
+          
+          // This is a simplified example - you'd need to track which PRs are included
+          console.log('Release created:', comment);
