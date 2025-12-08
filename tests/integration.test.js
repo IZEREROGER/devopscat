@@ -127,7 +127,8 @@ describe('Integration Tests', () => {
 
     test('should return 404 for non-existent note', async () => {
       const response = await request(app).delete('/api/notes/999');
-      expect(response.status).toBe(200); // Current implementation returns 200 even if not found
+      expect(response.status).toBe(404); // Correctly expect 404 for non-existent note
+      expect(response.body.error).toBe('Note not found');
     });
   });
 });
