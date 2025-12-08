@@ -52,6 +52,13 @@ function getDB() {
   return db;
 }
 
+// Add helper to ensure DB is initialized when a route needs it
+async function ensureDB() {
+  if (!db) {
+    await initDB();
+  }
+}
+
 // Routes
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -60,6 +67,7 @@ app.get('/', (req, res) => {
 // GET all notes
 app.get('/api/notes', async (req, res) => {
   try {
+    await ensureDB();
     const [rows] = await db.execute('SELECT * FROM notes ORDER BY created_at DESC');
     res.json(rows);
   } catch (error) {
@@ -77,6 +85,7 @@ app.post('/api/notes', async (req, res) => {
   }
 
   try {
+    await ensureDB();
     const [result] = await db.execute(
       'INSERT INTO notes (title, content) VALUES (?, ?)',
       [title, content]
@@ -103,6 +112,7 @@ app.put('/api/notes/:id', async (req, res) => {
   }
 
   try {
+    await ensureDB();
     const [result] = await db.execute(
       'UPDATE notes SET title = ?, content = ? WHERE id = ?',
       [title, content, id]
@@ -124,6 +134,7 @@ app.delete('/api/notes/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
+    await ensureDB();
     const [result] = await db.execute('DELETE FROM notes WHERE id = ?', [id]);
     
     if (result.affectedRows === 0) {
