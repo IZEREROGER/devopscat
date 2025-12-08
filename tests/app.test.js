@@ -1,16 +1,41 @@
 const request = require('supertest');
 
-// Mock the database module to avoid connection issues
-jest.mock('mysql2/promise', () => ({
-  createConnection: jest.fn(() => Promise.resolve({
-    execute: jest.fn(() => Promise.resolve([[], {}])),
-    end: jest.fn(() => Promise.resolve())
-  }))
-}));
-
-const app = require('../index');
-
 describe('Notes App - Basic Tests', () => {
+  let app;
+  let mockDB;
+
+  beforeAll(() => {
+    // Mock the database module with proper implementation
+    const mysql = require('mysql2/promise');
+    
+    mockDB = {
+      execute: jest.fn(),
+      end: jest.fn(() => Promise.resolve())
+    };
+
+    // Mock different responses for different queries
+    mockDB.execute.mockImplementation((query) => {
+      if (query.includes('CREATE TABLE')) {
+        return Promise.resolve([{}, {}]);
+      }
+      if (query.includes('SELECT')) {
+        return Promise.resolve([[], {}]); // Empty array of notes
+      }
+      if (query.includes('INSERT')) {
+        return Promise.resolve([{ insertId: 1, affectedRows: 1 }, {}]);
+      }
+      if (query.includes('UPDATE') || query.includes('DELETE')) {
+        return Promise.resolve([{ affectedRows: 1 }, {}]);
+      }
+      return Promise.resolve([[], {}]);
+    });
+
+    mysql.createConnection = jest.fn(() => Promise.resolve(mockDB));
+
+    // Import app after mocking
+    app = require('../index');
+  });
+
   describe('Health Check', () => {
     test('GET /health returns 200', async () => {
       const response = await request(app).get('/health');
@@ -54,8 +79,8 @@ describe('Notes App - Basic Tests', () => {
 
     test('DELETE /api/notes/:id accepts valid id', async () => {
       const response = await request(app).delete('/api/notes/999');
-      // Should return 404 since note doesn't exist, but not 400 for invalid request
-      expect([200, 404]).toContain(response.status);
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('message');
     });
   });
 
@@ -72,6 +97,33 @@ describe('Notes App - Basic Tests', () => {
         .send('{ invalid json }');
       
       expect(response.status).toBe(400);
+    });
+  });
+
+  describe('API CRUD Operations', () => {
+    test('POST /api/notes creates a note', async () => {
+      const response = await request(app)
+        .post('/api/notes')
+        .send({
+          title: 'Test Note',
+          content: 'Test Content'
+        });
+      
+      expect(response.status).toBe(201);
+      expect(response.body).toHaveProperty('id');
+      expect(response.body).toHaveProperty('title', 'Test Note');
+    });
+
+    test('PUT /api/notes/:id updates a note', async () => {
+      const response = await request(app)
+        .put('/api/notes/1')
+        .send({
+          title: 'Updated Note',
+          content: 'Updated Content'
+        });
+      
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('message');
     });
   });
 });
