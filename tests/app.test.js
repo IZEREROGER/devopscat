@@ -1,13 +1,16 @@
+// Mock the mysql2/promise module before any imports
+jest.mock('mysql2/promise', () => ({
+  createConnection: jest.fn()
+}));
+
 const request = require('supertest');
+const mysql = require('mysql2/promise');
 
 describe('Notes App - Basic Tests', () => {
   let app;
   let mockDB;
 
   beforeAll(() => {
-    // Mock the database module with proper implementation
-    const mysql = require('mysql2/promise');
-    
     mockDB = {
       execute: jest.fn(),
       end: jest.fn(() => Promise.resolve())
@@ -30,10 +33,16 @@ describe('Notes App - Basic Tests', () => {
       return Promise.resolve([[], {}]);
     });
 
-    mysql.createConnection = jest.fn(() => Promise.resolve(mockDB));
+    // Set up the mock to return our mockDB
+    mysql.createConnection.mockResolvedValue(mockDB);
 
-    // Import app after mocking
+    // Import app after setting up mocks
     app = require('../index');
+  });
+
+  beforeEach(() => {
+    // Reset mock call counts between tests
+    mockDB.execute.mockClear();
   });
 
   describe('Health Check', () => {
