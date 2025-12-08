@@ -325,12 +325,418 @@ For issues and questions:
 
 Last updated: January 2024
 
+# 📝 Notes Application
 
+A simple, modern notes management application built with Express.js and MySQL. Features a clean REST API and comprehensive test suite with CI/CD pipeline.
 
+[![CI/CD Pipeline](https://github.com/your-username/notes-app/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/your-username/notes-app/actions)
+[![Coverage Status](https://codecov.io/gh/your-username/notes-app/branch/main/graph/badge.svg)](https://codecov.io/gh/your-username/notes-app)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## ✨ Features
 
+- 📝 Create, read, update, and delete notes
+- 🗄️ MySQL database storage
+- 🚀 RESTful API design
+- 🧪 Comprehensive test suite (Unit, Integration, Performance)
+- 🔒 Security scanning with Snyk
+- 🐳 Docker containerization
+- 🔄 CI/CD pipeline with GitHub Actions
+- 📊 Code coverage reporting
+- 🔍 Code quality analysis with ESLint
 
+## 🏗️ Architecture
 
+```
+notes-app/
+├── index.js              # Main application server
+├── healthcheck.js         # Docker health check
+├── package.json           # Dependencies and scripts
+├── jest.config.js         # Test configuration
+├── .eslintrc.js          # Code linting rules
+├── Dockerfile            # Container configuration
+├── docker-compose.yml    # Multi-service setup
+├── .github/workflows/    # CI/CD pipeline
+├── tests/               # Test suites
+│   ├── setup.js         # Test configuration
+│   ├── app.test.js      # API integration tests
+│   ├── unit.test.js     # Unit tests
+│   ├── performance.test.js # Performance tests
+│   └── integration.test.js # End-to-end tests
+└── docs/                # Documentation
+    └── env.md           # Environment setup guide
+```
 
+## 🚀 Quick Start
 
-zip -r notes-app.zip . -x "node_modules/*"
+### Prerequisites
+
+- Node.js 18+ 
+- MySQL 8.0+
+- npm or yarn
+
+### Local Development
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-username/notes-app.git
+   cd notes-app
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Setup environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your database credentials
+   ```
+
+4. **Start MySQL and create database**
+   ```sql
+   CREATE DATABASE notes_app;
+   CREATE DATABASE notes_app_test; -- For testing
+   ```
+
+5. **Start the application**
+   ```bash
+   # Development mode with auto-reload
+   npm run dev
+
+   # Production mode
+   npm start
+   ```
+
+6. **Verify installation**
+   ```bash
+   curl http://localhost:3000/health
+   # Should return: {"status":"OK","timestamp":"..."}
+   ```
+
+### Using Docker
+
+1. **Quick start with Docker Compose**
+   ```bash
+   docker-compose up -d
+   ```
+
+2. **Build custom image**
+   ```bash
+   docker build -t notes-app .
+   docker run -p 3000:3000 notes-app
+   ```
+
+## 🧪 Testing
+
+### Run All Tests
+```bash
+npm test
+```
+
+### Test Categories
+
+| Command | Description | Coverage |
+|---------|-------------|----------|
+| `npm run test:unit` | Unit tests only | Fast, isolated |
+| `npm run test:integration` | Integration tests | Database included |
+| `npm run test:performance` | Performance benchmarks | Response time limits |
+| `npm run test:watch` | Watch mode for development | Auto-rerun on changes |
+| `npm run test:coverage` | Generate coverage report | HTML + LCOV formats |
+
+### Test Structure
+
+```bash
+tests/
+├── setup.js              # Global test configuration
+├── app.test.js            # API endpoint tests
+├── unit.test.js           # Isolated unit tests  
+├── integration.test.js    # End-to-end scenarios
+└── performance.test.js    # Load and timing tests
+```
+
+## 📡 API Documentation
+
+### Base URL
+```
+http://localhost:3000/api
+```
+
+### Endpoints
+
+| Method | Endpoint | Description | Request Body | Response |
+|--------|----------|-------------|--------------|----------|
+| `GET` | `/health` | Health check | - | `{"status":"OK","timestamp":"..."}` |
+| `GET` | `/api/notes` | Get all notes | - | `[{id,title,content,created_at,updated_at}]` |
+| `POST` | `/api/notes` | Create note | `{title,content}` | `{id,title,content,message}` |
+| `PUT` | `/api/notes/:id` | Update note | `{title,content}` | `{message}` |
+| `DELETE` | `/api/notes/:id` | Delete note | - | `{message}` |
+
+### Example Usage
+
+```bash
+# Create a new note
+curl -X POST http://localhost:3000/api/notes \
+  -H "Content-Type: application/json" \
+  -d '{"title":"My Note","content":"Note content here"}'
+
+# Get all notes
+curl http://localhost:3000/api/notes
+
+# Update a note
+curl -X PUT http://localhost:3000/api/notes/1 \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Updated Title","content":"Updated content"}'
+
+# Delete a note
+curl -X DELETE http://localhost:3000/api/notes/1
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+See [Environment Configuration Guide](docs/env.md) for detailed setup.
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `NODE_ENV` | Environment | `development` | No |
+| `PORT` | Server port | `3000` | No |
+| `DB_HOST` | Database host | `localhost` | Yes |
+| `DB_USER` | Database user | `root` | Yes |
+| `DB_PASSWORD` | Database password | `password` | Yes |
+| `DB_NAME` | Database name | `notes_app` | Yes |
+
+### Database Schema
+
+```sql
+CREATE TABLE notes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  content TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+## 🔄 CI/CD Pipeline
+
+### GitHub Actions Workflow
+
+```yaml
+# Triggers: Push, Pull Request, Manual dispatch
+# Runs on: ubuntu-latest with Node 18, MySQL 8.0
+
+Pipeline Stages:
+1. 🔍 Code Quality  (ESLint, format check)
+2. 🧪 Testing       (Unit, Integration, Performance)  
+3. 🔒 Security      (Snyk vulnerability scan)
+4. 📊 Coverage      (Codecov reporting)
+5. 🐳 Docker Build  (Multi-stage optimized)
+6. 📢 Notifications (Slack alerts)
+```
+
+### Pipeline Status
+
+- ✅ **Code Quality**: ESLint with zero warnings
+- ✅ **Test Coverage**: 80%+ required on all metrics  
+- ✅ **Security**: No high/critical vulnerabilities
+- ✅ **Performance**: All endpoints < 500ms response time
+
+## 🐳 Docker Deployment
+
+### Production Deployment
+
+```bash
+# Build optimized production image
+docker build -t notes-app:latest .
+
+# Run with environment variables
+docker run -d \
+  --name notes-app-prod \
+  -p 8080:3000 \
+  -e NODE_ENV=production \
+  -e DB_HOST=your-db-host \
+  -e DB_USER=your-db-user \
+  -e DB_PASSWORD=your-db-password \
+  -e DB_NAME=notes_production \
+  notes-app:latest
+```
+
+### Docker Compose Production
+
+```yaml
+version: '3.8'
+services:
+  app:
+    image: notes-app:latest
+    ports:
+      - "8080:3000"
+    environment:
+      NODE_ENV: production
+      DB_HOST: mysql
+    depends_on:
+      - mysql
+  
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: secure_password
+      MYSQL_DATABASE: notes_app
+    volumes:
+      - mysql_data:/var/lib/mysql
+```
+
+## 🚦 Development Workflow
+
+### Local Development Setup
+
+```bash
+# 1. Install and setup
+git clone <repo> && cd notes-app
+npm install
+cp .env.example .env
+
+# 2. Start services  
+docker-compose up -d mysql  # Database only
+npm run dev                 # App with hot reload
+
+# 3. Run tests
+npm run test:watch         # Watch mode
+npm run lint              # Code quality
+```
+
+### Contributing
+
+1. **Fork** the repository
+2. **Create** feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to branch (`git push origin feature/amazing-feature`)  
+5. **Open** Pull Request
+
+### Code Standards
+
+- **ESLint**: Enforced code style and quality
+- **Testing**: 80%+ coverage required
+- **Security**: Snyk scanning for vulnerabilities
+- **Documentation**: Update README for new features
+
+## 📊 Monitoring & Observability
+
+### Health Checks
+
+```bash
+# Application health
+curl http://localhost:3000/health
+
+# Database connectivity (via health endpoint)
+# Container health (Docker)
+docker ps --filter "health=healthy"
+```
+
+### Logging
+
+```javascript
+// Structured logging levels
+console.log('INFO: Application started');
+console.warn('WARN: Database connection slow');
+console.error('ERROR: Failed to create note');
+```
+
+### Metrics (Future Implementation)
+
+- Request/response times
+- Database connection pool status  
+- Error rates and types
+- Resource utilization
+
+## 🔒 Security
+
+### Security Measures
+
+- **Dependency Scanning**: Snyk integration in CI/CD
+- **Input Validation**: SQL injection prevention
+- **Docker Security**: Non-root user, minimal base image
+- **Environment Isolation**: Separate dev/staging/prod configs
+
+### Security Checklist
+
+- [ ] Regular dependency updates
+- [ ] Database credentials rotation
+- [ ] HTTPS in production (future)
+- [ ] Rate limiting (future)
+- [ ] Authentication/authorization (future)
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+**Database Connection Failed**
+```bash
+# Check MySQL service
+docker-compose logs mysql
+
+# Verify credentials  
+mysql -h localhost -u root -p
+
+# Check environment variables
+echo $DB_HOST $DB_USER $DB_NAME
+```
+
+**Tests Failing**
+```bash
+# Clear test database
+npm run test:integration -- --clearCache
+
+# Rebuild containers
+docker-compose down -v && docker-compose up -d
+```
+
+**Port Already in Use**
+```bash
+# Find process using port 3000
+lsof -ti:3000
+
+# Kill process or change PORT in .env
+export PORT=3001
+```
+
+### Getting Help
+
+- 📖 Check [Environment Setup Guide](docs/env.md)
+- 🐛 [Create an Issue](https://github.com/your-username/notes-app/issues)
+- 💬 [Discussion Forum](https://github.com/your-username/notes-app/discussions)
+
+## 📈 Roadmap
+
+### Version 2.0.0 (Planned)
+- [ ] User authentication (JWT)
+- [ ] Note categories and tags  
+- [ ] Full-text search
+- [ ] File attachments
+- [ ] Real-time collaboration
+
+### Version 1.1.0 (Next)
+- [ ] Rate limiting  
+- [ ] Request logging
+- [ ] Prometheus metrics
+- [ ] HTTPS support
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Acknowledgments
+
+- Express.js team for the excellent framework
+- MySQL team for reliable database
+- Jest team for comprehensive testing tools
+- GitHub Actions for seamless CI/CD
+- Docker for containerization platform
+
+---
+
+**Built with ❤️ by [Your Name]**
+
+*Last updated: January 2024**

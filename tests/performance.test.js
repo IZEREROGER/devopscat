@@ -1,12 +1,14 @@
 const http = require('http');
 const { spawn } = require('child_process');
+const request = require('supertest');
+const app = require('../index');
 
 // Simple performance test without external dependencies
 async function performanceTest() {
   console.log('🚀 Starting Performance Tests...');
   
   // Start the application
-  const app = spawn('node', ['index.js'], {
+  const appProcess = spawn('node', ['index.js'], {
     env: { ...process.env, NODE_ENV: 'test', PORT: '3001' },
     stdio: 'pipe'
   });
@@ -45,7 +47,7 @@ async function performanceTest() {
   }
 
   // Clean up
-  app.kill();
+  appProcess.kill();
 
   // Report results
   console.log('\n📊 Performance Test Results:');
@@ -142,5 +144,58 @@ if (require.main === module) {
     process.exit(1);
   });
 }
+
+describe('Performance Tests', () => {
+  beforeAll(async () => {
+    // Initialize database for tests
+    await require('../index').initDB();
+  });
+
+  afterAll(async () => {
+    // Close database connection
+    await require('../index').closeDB();
+  });
+
+  describe('Response Time Tests', () => {
+    test('Health check responds within 100ms', async () => {
+      const start = Date.now();
+      const response = await request(app).get('/health');
+      const responseTime = Date.now() - start;
+      
+      expect(response.status).toBe(200);
+      expect(responseTime).toBeLessThan(100);
+    });
+
+    test('API endpoints respond within 500ms', async () => {
+      const start = Date.now();
+      const response = await request(app).get('/api/notes');
+      const responseTime = Date.now() - start;
+      
+      expect(responseTime).toBeLessThan(500);
+    });
+
+    test('Static file serving responds within 200ms', async () => {
+      const start = Date.now();
+      const response = await request(app).get('/');
+      const responseTime = Date.now() - start;
+      
+      expect(responseTime).toBeLessThan(200);
+    });
+  });
+
+  describe('Load Tests', () => {
+    test('Can handle multiple concurrent requests', async () => {
+      const requests = Array(5).fill().map(() => 
+        request(app).get('/health')
+      );
+      
+      const responses = await Promise.all(requests);
+      
+      responses.forEach(response => {
+        expect(response.status).toBe(200);
+      });
+    });
+  });
+});
 
 module.exports = { performanceTest };
