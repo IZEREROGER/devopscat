@@ -1,31 +1,66 @@
 {
   "name": "notes-app",
   "version": "1.0.0",
-  "description": "Simple Notes App with DevOps pipeline",
+  "description": "A simple notes application with Node.js and MySQL",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:unit": "jest --testPathPattern=tests/.*\\.test\\.js --testNamePattern='^(?!.*Integration).*'",
-    "test:integration": "jest --testPathPattern=tests/integration\\.test\\.js --runInBand",
-    "test:coverage": "jest --coverage --testPathPattern=tests/.*\\.test\\.js",
+    "test:coverage": "jest --coverage",
+    "test:integration": "jest --testPathPattern=integration",
+    "test:unit": "jest --testPathIgnorePatterns=integration --testPathIgnorePatterns=performance",
     "test:performance": "node tests/performance.test.js",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "healthcheck": "node healthcheck.js"
   },
+  "keywords": [
+    "nodejs",
+    "express",
+    "mysql",
+    "notes",
+    "api"
+  ],
+  "author": "DevOps Cat Team",
+  "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
     "mysql2": "^3.6.5"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
-    "jest": "^29.7.0",
     "eslint": "^8.55.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
     "supertest": "^6.3.3"
   },
-  "keywords": ["nodejs", "express", "mysql", "devops", "notes"],
-  "author": "DevOps Student",
-  "license": "MIT"
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
+    "testTimeout": 30000,
+    "verbose": true,
+    "forceExit": true,
+    "detectOpenHandles": true,
+    "collectCoverage": true,
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 60,
+        "functions": 60,
+        "lines": 60,
+        "statements": 60
+      }
+    }
+  }
 }

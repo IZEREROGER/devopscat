@@ -40,10 +40,10 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: testpassword
+          MYSQL_ROOT_PASSWORD: password
           MYSQL_DATABASE: notes_app_test
-          MYSQL_USER: testuser
-          MYSQL_PASSWORD: testpassword
+          MYSQL_USER: root
+          MYSQL_PASSWORD: password
         ports:
           - 3306:3306
         options: >-
@@ -76,7 +76,7 @@ jobs:
     - name: Wait for MySQL to be ready
       run: |
         for i in {1..60}; do
-          if mysqladmin ping -h 127.0.0.1 -P 3306 -u root --password=testpassword --silent; then
+          if mysqladmin ping -h 127.0.0.1 -P 3306 -u root --password=password --silent; then
             echo "MySQL is ready!"
             break
           fi
@@ -85,7 +85,7 @@ jobs:
         done
         
         # Verify database exists
-        mysql -h 127.0.0.1 -P 3306 -u root --password=testpassword -e "SHOW DATABASES;" | grep notes_app_test
+        mysql -h 127.0.0.1 -P 3306 -u root --password=password -e "SHOW DATABASES;" | grep notes_app_test
     
     - name: Run unit tests
       if: matrix.test-type == 'unit'
@@ -100,7 +100,7 @@ jobs:
         NODE_ENV: test
         TEST_DB_HOST: 127.0.0.1
         TEST_DB_USER: root
-        TEST_DB_PASSWORD: testpassword
+        TEST_DB_PASSWORD: password
         TEST_DB_NAME: notes_app_test
     
     - name: Generate coverage report

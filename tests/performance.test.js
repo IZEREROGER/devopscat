@@ -1,6 +1,15 @@
 const http = require('http');
 const { spawn } = require('child_process');
 const request = require('supertest');
+
+// Mock the database connection for performance tests
+jest.mock('mysql2/promise', () => ({
+  createConnection: jest.fn(() => Promise.resolve({
+    execute: jest.fn(() => Promise.resolve([[], {}])),
+    end: jest.fn(() => Promise.resolve())
+  }))
+}));
+
 const app = require('../index');
 
 // Simple performance test without external dependencies
@@ -146,16 +155,6 @@ if (require.main === module) {
 }
 
 describe('Performance Tests', () => {
-  beforeAll(async () => {
-    // Initialize database for tests
-    await require('../index').initDB();
-  });
-
-  afterAll(async () => {
-    // Close database connection
-    await require('../index').closeDB();
-  });
-
   describe('Response Time Tests', () => {
     test('Health check responds within 100ms', async () => {
       const start = Date.now();
