@@ -12,7 +12,7 @@ env:
 
 jobs:
   lint:
-    name: Code Quality
+    name: Code Quality 1
     runs-on: ubuntu-latest
     
     steps:
