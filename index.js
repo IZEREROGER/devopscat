@@ -32,10 +32,24 @@ async function initDB() {
       )
     `);
     console.log('Database connected and table created');
+    return db;
   } catch (error) {
     console.error('Database connection failed:', error);
-    process.exit(1);
+    throw error;
   }
+}
+
+// Close database connection
+async function closeDB() {
+  if (db) {
+    await db.end();
+    db = null;
+  }
+}
+
+// Get database instance
+function getDB() {
+  return db;
 }
 
 // Routes
@@ -132,9 +146,22 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   await initDB();
-  app.listen(PORT, () => {
+  return app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 }
 
-startServer();
+// Only start server if this file is run directly
+if (require.main === module) {
+  startServer().catch(error => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  });
+}
+
+// Export for testing
+module.exports = app;
+module.exports.initDB = initDB;
+module.exports.closeDB = closeDB;
+module.exports.getDB = getDB;
+module.exports.startServer = startServer;
