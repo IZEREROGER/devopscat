@@ -1,4 +1,6 @@
 name: Release
+permissions:
+  contents: write    # Required to push tags
 
 on:
   push:
