@@ -1,0 +1,4 @@
+# ignore required app and folders for nodejs app for push 
+node_modules/
+coverage/
+.DS_Store

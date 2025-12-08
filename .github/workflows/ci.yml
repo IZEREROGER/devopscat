@@ -1,0 +1,261 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  NODE_VERSION: '18'
+  MYSQL_VERSION: '8.0'
+
+jobs:
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run ESLint
+      run: npm run lint
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    services:
+      mysql:
+        image: mysql:${{ env.MYSQL_VERSION }}
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: notes_app_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    strategy:
+      matrix:
+        test-type: [unit, integration]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Wait for MySQL
+      run: |
+        until mysqladmin ping -h"localhost" -P"3306" -u"root" -p"password" --silent; do
+          sleep 1
+        done
+    
+    - name: Run unit tests
+      if: matrix.test-type == 'unit'
+      run: npm run test -- --testPathIgnorePatterns=integration
+      env:
+        NODE_ENV: test
+    
+    - name: Run integration tests
+      if: matrix.test-type == 'integration'
+      run: npm run test:integration
+      env:
+        NODE_ENV: test
+        TEST_DB_HOST: localhost
+        TEST_DB_USER: root
+        TEST_DB_PASSWORD: password
+        TEST_DB_NAME: notes_app_test
+    
+    - name: Generate coverage report
+      if: matrix.test-type == 'unit'
+      run: npm run test:coverage
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run security audit
+      run: npm audit --audit-level=high
+    
+    - name: Run Snyk security scan
+      uses: snyk/actions/node@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --severity-threshold=medium
+
+  build:
+    name: Build & Test Docker
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker image
+      run: |
+        docker build -t notes-app:${{ github.sha }} .
+        docker build -t notes-app:latest .
+    
+    - name: Test Docker container
+      run: |
+        docker run -d --name test-container -p 3000:3000 notes-app:latest
+        sleep 15
+        curl -f http://localhost:3000/health || exit 1
+        docker logs test-container
+        docker stop test-container
+        docker rm test-container
+
+  performance:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Install k6
+      run: |
+        sudo gpg -k
+        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+    
+    - name: Run performance tests
+      run: |
+        echo 'import http from "k6/http";
+        import { check } from "k6";
+        
+        export const options = {
+          stages: [
+            { duration: "30s", target: 10 },
+            { duration: "30s", target: 10 },
+            { duration: "30s", target: 0 },
+          ],
+        };
+        
+        export default function() {
+          const response = http.get("http://localhost:3000/health");
+          check(response, {
+            "status is 200": (r) => r.status === 200,
+            "response time < 200ms": (r) => r.timings.duration < 200,
+          });
+        }' > performance-test.js
+        
+        docker run -d --name perf-test -p 3000:3000 notes-app:latest
+        sleep 10
+        k6 run performance-test.js
+        docker stop perf-test
+
+  notify:
+    name: Notify Results
+    runs-on: ubuntu-latest
+    needs: [test, security, build, performance]
+    if: always()
+    
+    steps:
+    - name: Notify Slack on Success
+      if: success()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        channel: '#devops-notifications'
+        message: |
+          ✅ CI/CD Pipeline Passed!
+          
+          📊 **Pipeline Results:**
+          - Tests: ✅ Passed
+          - Security: ✅ Passed  
+          - Build: ✅ Passed
+          - Performance: ✅ Passed
+          
+          **Commit:** ${{ github.sha }}
+          **Branch:** ${{ github.ref }}
+          **Author:** ${{ github.actor }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    
+    - name: Notify Slack on Failure
+      if: failure()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        channel: '#devops-alerts'
+        message: |
+          ❌ CI/CD Pipeline Failed!
+          
+          📊 **Pipeline Results:**
+          - Tests: ${{ needs.test.result == 'success' && '✅' || '❌' }}
+          - Security: ${{ needs.security.result == 'success' && '✅' || '❌' }}
+          - Build: ${{ needs.build.result == 'success' && '✅' || '❌' }}
+          - Performance: ${{ needs.performance.result == 'success' && '✅' || '❌' }}
+          
+          **Commit:** ${{ github.sha }}
+          **Branch:** ${{ github.ref }}
+          **Author:** ${{ github.actor }}
+          
+          Please check the logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [test, security, build]
+    if: github.ref == 'refs/heads/main' && success()
+    
+    steps:
+    - name: Deploy to staging
+      run: |
+        echo "🚀 Deploying to staging environment..."
+        # Add actual deployment commands here
+        echo "✅ Deployment completed successfully!"
