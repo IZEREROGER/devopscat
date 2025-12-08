@@ -38,7 +38,7 @@ jobs:
     
     services:
       mysql:
-        image: mysql:${{ env.MYSQL_VERSION }}
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: password
           MYSQL_DATABASE: notes_app_test
