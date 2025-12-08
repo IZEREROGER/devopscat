@@ -1,133 +1,40 @@
 const request = require('supertest');
 const mysql = require('mysql2/promise');
 
-// Mock database for testing
 jest.mock('mysql2/promise');
 
+let app;
+let mockDb;
+
+beforeAll(async () => {
+  // Set up mocked DB before the app initializes
+  mockDb = {
+    execute: jest.fn(),
+    end: jest.fn()
+  };
+  // Simulate first execute (table creation) returns empty result
+  mockDb.execute.mockResolvedValueOnce([]);
+
+  mysql.createConnection.mockResolvedValue(mockDb);
+
+  // require app and initialize DB (this will use the mocked mysql)
+  // we require after setting up the mock to avoid race conditions
+  app = require('../index');
+
+  await app.initDB();
+});
+
+afterAll(async () => {
+  if (app && app.closeDB) {
+    await app.closeDB();
+  }
+});
+
 describe('Notes App', () => {
-  let mockDb;
-  let app;
-
-  beforeAll(async () => {
-    // Mock database connection
-    mockDb = {
-      execute: jest.fn(),
-      close: jest.fn()
-    };
-    mysql.createConnection.mockResolvedValue(mockDb);
-    
-    // Mock successful table creation
-    mockDb.execute.mockResolvedValueOnce([]);
-    
-    // Set test environment variables
-    process.env.NODE_ENV = 'test';
-    process.env.DB_HOST = 'localhost';
-    process.env.DB_USER = 'test';
-    process.env.DB_PASSWORD = 'test';
-    process.env.DB_NAME = 'test_db';
-    
-    // Import app after mocking and env setup
-    const express = require('express');
-    const path = require('path');
-    
-    app = express();
-    
-    // Middleware
-    app.use(express.json());
-    app.use(express.urlencoded({ extended: true }));
-    app.use(express.static('public'));
-    
-    // Mock database instance
-    const db = mockDb;
-    
-    // Routes (copied from main app for testing)
-    app.get('/', (req, res) => {
-      res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
-    });
-
-    app.get('/api/notes', async (req, res) => {
-      try {
-        const [rows] = await db.execute('SELECT * FROM notes ORDER BY created_at DESC');
-        res.json(rows);
-      } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch notes' });
-      }
-    });
-
-    app.post('/api/notes', async (req, res) => {
-      const { title, content } = req.body;
-      
-      if (!title || !content) {
-        return res.status(400).json({ error: 'Title and content are required' });
-      }
-
-      try {
-        const [result] = await db.execute(
-          'INSERT INTO notes (title, content) VALUES (?, ?)',
-          [title, content]
-        );
-        res.status(201).json({ 
-          id: result.insertId, 
-          title, 
-          content, 
-          message: 'Note created successfully' 
-        });
-      } catch (error) {
-        res.status(500).json({ error: 'Failed to create note' });
-      }
-    });
-
-    app.put('/api/notes/:id', async (req, res) => {
-      const { id } = req.params;
-      const { title, content } = req.body;
-
-      if (!title || !content) {
-        return res.status(400).json({ error: 'Title and content are required' });
-      }
-
-      try {
-        const [result] = await db.execute(
-          'UPDATE notes SET title = ?, content = ? WHERE id = ?',
-          [title, content, id]
-        );
-        
-        if (result.affectedRows === 0) {
-          return res.status(404).json({ error: 'Note not found' });
-        }
-        
-        res.json({ message: 'Note updated successfully' });
-      } catch (error) {
-        res.status(500).json({ error: 'Failed to update note' });
-      }
-    });
-
-    app.delete('/api/notes/:id', async (req, res) => {
-      const { id } = req.params;
-
-      try {
-        const [result] = await db.execute('DELETE FROM notes WHERE id = ?', [id]);
-        
-        if (result.affectedRows === 0) {
-          return res.status(404).json({ error: 'Note not found' });
-        }
-        
-        res.json({ message: 'Note deleted successfully' });
-      } catch (error) {
-        res.status(500).json({ error: 'Failed to delete note' });
-      }
-    });
-
-    app.get('/health', (req, res) => {
-      res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
-    });
-  });
-
   beforeEach(() => {
     jest.clearAllMocks();
-  });
-
-  afterAll(() => {
-    jest.restoreAllMocks();
+    // Re-mock table creation for each new test run if needed
+    mockDb.execute.mockResolvedValueOnce([]);
   });
 
   describe('Health Check', () => {
