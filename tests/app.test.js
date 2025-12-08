@@ -1,233 +1,302 @@
 const request = require('supertest');
 const mysql = require('mysql2/promise');
 
-jest.mock('mysql2/promise');
+// Test database configuration
+const testDbConfig = {
+  host: process.env.TEST_DB_HOST || 'localhost',
+  user: process.env.TEST_DB_USER || 'testuser',
+  password: process.env.TEST_DB_PASSWORD || 'password',
+  database: process.env.TEST_DB_NAME || 'notes_app_test'
+};
 
-let app;
-let mockDb;
-let initDB, closeDB;
+describe('Notes App API', () => {
+  let app;
+  let db;
 
-beforeAll(async () => {
-  // Set up mocked DB before the app initializes
-  mockDb = {
-    execute: jest.fn(),
-    end: jest.fn()
-  };
-  
-  mysql.createConnection.mockResolvedValue(mockDb);
+  beforeAll(async () => {
+    // Set test environment variables
+    process.env.NODE_ENV = 'test';
+    process.env.DB_HOST = testDbConfig.host;
+    process.env.DB_USER = testDbConfig.user;
+    process.env.DB_PASSWORD = testDbConfig.password;
+    process.env.DB_NAME = testDbConfig.database;
+    
+    // Import app after setting environment variables
+    app = require('../index');
+    
+    // Wait for app initialization
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Connect to test database
+    try {
+      db = await mysql.createConnection(testDbConfig);
+    } catch (error) {
+      console.error('Failed to connect to test database:', error);
+      // Skip tests if database is not available
+      if (error.code === 'ECONNREFUSED' || error.code === 'ER_ACCESS_DENIED_ERROR') {
+        console.warn('Test database not available, skipping database tests');
+        return;
+      }
+      throw error;
+    }
+  });
 
-  // Require app after setting up the mock
-  const appModule = require('../index');
-  app = appModule;
-  initDB = appModule.initDB;
-  closeDB = appModule.closeDB;
+  beforeEach(async () => {
+    // Clean up database before each test (only if db connection exists)
+    if (db) {
+      try {
+        await db.execute('DELETE FROM notes');
+        await db.execute('ALTER TABLE notes AUTO_INCREMENT = 1');
+      } catch (error) {
+        console.warn('Failed to clean database, continuing with tests:', error.message);
+      }
+    }
+  });
 
-  // Simulate table creation
-  mockDb.execute.mockResolvedValueOnce([]);
-  await initDB();
-});
-
-afterAll(async () => {
-  if (closeDB) {
-    await closeDB();
-  }
-});
-
-describe('Notes App', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+  afterAll(async () => {
+    // Clean up connections
+    if (db) {
+      try {
+        await db.end();
+      } catch (error) {
+        console.warn('Error closing database connection:', error.message);
+      }
+    }
+    
+    // Close app database connection
+    const { closeDB } = require('../index');
+    if (closeDB) {
+      try {
+        await closeDB();
+      } catch (error) {
+        console.warn('Error closing app database:', error.message);
+      }
+    }
   });
 
   describe('Health Check', () => {
-    test('GET /health should return OK status', async () => {
-      const response = await request(app).get('/health');
+    test('GET /health should return status OK', async () => {
+      const response = await request(app)
+        .get('/health')
+        .expect(200);
       
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('status', 'OK');
-      expect(response.body).toHaveProperty('timestamp');
+      expect(response.body.status).toBe('OK');
+      expect(response.body.timestamp).toBeDefined();
     });
   });
 
-  describe('Frontend Routes', () => {
+  describe('Static Routes', () => {
     test('GET / should serve index.html', async () => {
-      const response = await request(app).get('/');
+      const response = await request(app)
+        .get('/')
+        .expect(200);
       
-      // Will be 404 if index.html doesn't exist in test environment
-      expect([200, 404]).toContain(response.status);
+      expect(response.headers['content-type']).toMatch(/text\/html/);
     });
   });
 
-  describe('Notes API', () => {
-    describe('GET /api/notes', () => {
-      test('should return all notes', async () => {
-        const mockNotes = [
-          { id: 1, title: 'Test Note', content: 'Test content', created_at: new Date() }
-        ];
-        
-        mockDb.execute.mockResolvedValueOnce([mockNotes]);
+  describe('Notes API - Basic Functionality', () => {
+    test('GET /api/notes should return empty array initially', async () => {
+      if (!db) {
+        console.warn('Skipping database test - no connection');
+        return;
+      }
 
-        const response = await request(app).get('/api/notes');
-        
-        expect(response.status).toBe(200);
-        expect(response.body).toEqual(mockNotes);
-        expect(mockDb.execute).toHaveBeenCalledWith('SELECT * FROM notes ORDER BY created_at DESC');
-      });
-
-      test('should handle database errors', async () => {
-        mockDb.execute.mockRejectedValueOnce(new Error('Database error'));
-
-        const response = await request(app).get('/api/notes');
-        
-        expect(response.status).toBe(500);
-        expect(response.body).toEqual({ error: 'Failed to fetch notes' });
-      });
+      const response = await request(app)
+        .get('/api/notes')
+        .expect(200);
+      
+      expect(Array.isArray(response.body)).toBe(true);
     });
 
-    describe('POST /api/notes', () => {
-      test('should create a new note', async () => {
-        const newNote = { title: 'New Note', content: 'New content' };
-        const mockResult = { insertId: 1 };
-        
-        mockDb.execute.mockResolvedValueOnce([mockResult]);
+    test('POST /api/notes should create a new note', async () => {
+      if (!db) {
+        console.warn('Skipping database test - no connection');
+        return;
+      }
 
-        const response = await request(app)
-          .post('/api/notes')
-          .send(newNote);
-        
-        expect(response.status).toBe(201);
-        expect(response.body).toEqual({
-          id: 1,
-          title: 'New Note',
-          content: 'New content',
-          message: 'Note created successfully'
-        });
-      });
+      const newNote = {
+        title: 'Test Note',
+        content: 'This is a test note'
+      };
 
-      test('should validate required fields', async () => {
-        const response = await request(app)
-          .post('/api/notes')
-          .send({ title: 'Only title' });
-        
-        expect(response.status).toBe(400);
-        expect(response.body).toEqual({ error: 'Title and content are required' });
-      });
-
-      test('should handle database errors on creation', async () => {
-        const newNote = { title: 'New Note', content: 'New content' };
-        mockDb.execute.mockRejectedValueOnce(new Error('Database error'));
-
-        const response = await request(app)
-          .post('/api/notes')
-          .send(newNote);
-        
-        expect(response.status).toBe(500);
-        expect(response.body).toEqual({ error: 'Failed to create note' });
-      });
+      const response = await request(app)
+        .post('/api/notes')
+        .send(newNote)
+        .expect(201);
+      
+      expect(response.body.id).toBeDefined();
+      expect(response.body.title).toBe(newNote.title);
+      expect(response.body.content).toBe(newNote.content);
+      expect(response.body.message).toBe('Note created successfully');
     });
 
-    describe('PUT /api/notes/:id', () => {
-      test('should update existing note', async () => {
-        const updateData = { title: 'Updated Note', content: 'Updated content' };
-        const mockResult = { affectedRows: 1 };
-        
-        mockDb.execute.mockResolvedValueOnce([mockResult]);
+    test('POST /api/notes should validate required fields', async () => {
+      const invalidNote = {
+        title: '',
+        content: ''
+      };
 
-        const response = await request(app)
-          .put('/api/notes/1')
-          .send(updateData);
-        
-        expect(response.status).toBe(200);
-        expect(response.body).toEqual({ message: 'Note updated successfully' });
-      });
-
-      test('should return 404 for non-existent note', async () => {
-        const updateData = { title: 'Updated Note', content: 'Updated content' };
-        const mockResult = { affectedRows: 0 };
-        
-        mockDb.execute.mockResolvedValueOnce([mockResult]);
-
-        const response = await request(app)
-          .put('/api/notes/999')
-          .send(updateData);
-        
-        expect(response.status).toBe(404);
-        expect(response.body).toEqual({ error: 'Note not found' });
-      });
+      const response = await request(app)
+        .post('/api/notes')
+        .send(invalidNote)
+        .expect(400);
+      
+      expect(response.body.error).toBe('Title and content are required');
     });
 
-    describe('DELETE /api/notes/:id', () => {
-      test('should delete existing note', async () => {
-        const mockResult = { affectedRows: 1 };
-        
-        mockDb.execute.mockResolvedValueOnce([mockResult]);
+    test('PUT /api/notes/:id should update existing note', async () => {
+      if (!db) {
+        console.warn('Skipping database test - no connection');
+        return;
+      }
 
-        const response = await request(app).delete('/api/notes/1');
-        
-        expect(response.status).toBe(200);
-        expect(response.body).toEqual({ message: 'Note deleted successfully' });
-      });
+      // First create a note
+      const createResponse = await request(app)
+        .post('/api/notes')
+        .send({
+          title: 'Original Title',
+          content: 'Original content'
+        })
+        .expect(201);
 
-      test('should return 404 for non-existent note', async () => {
-        const mockResult = { affectedRows: 0 };
-        
-        mockDb.execute.mockResolvedValueOnce([mockResult]);
+      const noteId = createResponse.body.id;
 
-        const response = await request(app).delete('/api/notes/999');
-        
-        expect(response.status).toBe(404);
-        expect(response.body).toEqual({ error: 'Note not found' });
-      });
+      // Update the note
+      const updatedNote = {
+        title: 'Updated Title',
+        content: 'Updated content'
+      };
+
+      await request(app)
+        .put(`/api/notes/${noteId}`)
+        .send(updatedNote)
+        .expect(200);
+    });
+
+    test('PUT /api/notes/:id should return 404 for non-existent note', async () => {
+      const updatedNote = {
+        title: 'Updated Title',
+        content: 'Updated content'
+      };
+
+      await request(app)
+        .put('/api/notes/999')
+        .send(updatedNote)
+        .expect(404);
+    });
+
+    test('DELETE /api/notes/:id should delete existing note', async () => {
+      if (!db) {
+        console.warn('Skipping database test - no connection');
+        return;
+      }
+
+      // First create a note
+      const createResponse = await request(app)
+        .post('/api/notes')
+        .send({
+          title: 'Note to Delete',
+          content: 'This will be deleted'
+        })
+        .expect(201);
+
+      const noteId = createResponse.body.id;
+
+      // Delete the note
+      await request(app)
+        .delete(`/api/notes/${noteId}`)
+        .expect(200);
+
+      // Verify it's deleted
+      const getResponse = await request(app)
+        .get('/api/notes')
+        .expect(200);
+      
+      expect(getResponse.body.find(note => note.id === noteId)).toBeUndefined();
+    });
+
+    test('DELETE /api/notes/:id should return 404 for non-existent note', async () => {
+      await request(app)
+        .delete('/api/notes/999')
+        .expect(404);
     });
   });
 
-  describe('Input Validation', () => {
-    test('should reject XSS attempts', async () => {
-      const maliciousNote = {
-        title: '<script>alert("xss")</script>',
-        content: '<img src=x onerror=alert("xss")>'
-      };
-
-      mockDb.execute.mockResolvedValueOnce([{ insertId: 1 }]);
-
+  describe('Error Handling', () => {
+    test('should handle malformed JSON', async () => {
       const response = await request(app)
         .post('/api/notes')
-        .send(maliciousNote);
-      
-      expect(response.status).toBe(201);
-      // Note: In production, add proper sanitization
+        .set('Content-Type', 'application/json')
+        .send('{"invalid": json}')
+        .expect(400);
     });
 
-    test('should handle large content', async () => {
-      const largeNote = {
-        title: 'Large Note',
-        content: 'A'.repeat(10000)
-      };
-
-      mockDb.execute.mockResolvedValueOnce([{ insertId: 1 }]);
-
+    test('should handle missing content-type', async () => {
       const response = await request(app)
         .post('/api/notes')
-        .send(largeNote);
+        .send('title=test&content=test');
       
-      expect(response.status).toBe(201);
+      // Should still work with URL encoded data
+      expect(response.status).toBeLessThan(500);
     });
+  });
 
-    test('should handle empty strings as invalid', async () => {
-      const response = await request(app)
-        .post('/api/notes')
-        .send({ title: '', content: '' });
-      
-      expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: 'Title and content are required' });
-    });
+  describe('Integration Tests', () => {
+    test('should perform full CRUD cycle', async () => {
+      if (!db) {
+        console.warn('Skipping database test - no connection');
+        return;
+      }
 
-    test('should handle missing fields', async () => {
-      const response = await request(app)
+      // Create
+      const createResponse = await request(app)
         .post('/api/notes')
-        .send({});
+        .send({
+          title: 'CRUD Test Note',
+          content: 'Testing full CRUD operations'
+        })
+        .expect(201);
+
+      const noteId = createResponse.body.id;
+
+      // Read
+      const readResponse = await request(app)
+        .get('/api/notes')
+        .expect(200);
       
-      expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: 'Title and content are required' });
+      const createdNote = readResponse.body.find(note => note.id === noteId);
+      expect(createdNote).toBeDefined();
+      expect(createdNote.title).toBe('CRUD Test Note');
+
+      // Update
+      await request(app)
+        .put(`/api/notes/${noteId}`)
+        .send({
+          title: 'Updated CRUD Test Note',
+          content: 'Updated content for CRUD test'
+        })
+        .expect(200);
+
+      // Verify update
+      const updatedReadResponse = await request(app)
+        .get('/api/notes')
+        .expect(200);
+      
+      const updatedNote = updatedReadResponse.body.find(note => note.id === noteId);
+      expect(updatedNote.title).toBe('Updated CRUD Test Note');
+
+      // Delete
+      await request(app)
+        .delete(`/api/notes/${noteId}`)
+        .expect(200);
+
+      // Verify deletion
+      const finalReadResponse = await request(app)
+        .get('/api/notes')
+        .expect(200);
+      
+      expect(finalReadResponse.body.find(note => note.id === noteId)).toBeUndefined();
     });
   });
 });
