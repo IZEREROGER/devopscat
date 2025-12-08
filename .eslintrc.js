@@ -17,7 +17,7 @@ module.exports = {
     'quotes': ['error', 'single'],
     'semi': ['error', 'always'],
     'no-unused-vars': ['error', { 'argsIgnorePattern': '^_' }],
-    'no-console': 'warn',
+    'no-console': 'off', // Allow console for Node.js server logging
     'no-debugger': 'error',
     'prefer-const': 'error',
     'no-var': 'error'

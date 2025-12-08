@@ -2,10 +2,10 @@
 process.env.NODE_ENV = 'test';
 process.env.PORT = '3001';
 
-// Suppress console.log during tests
+// Suppress console.log during tests (use Jest's built-in mocking)
 if (process.env.NODE_ENV === 'test') {
-  console.log = jest.fn();
-  console.error = jest.fn();
+  jest.spyOn(console, 'log').mockImplementation(() => {});
+  jest.spyOn(console, 'error').mockImplementation(() => {});
 }
 
 // Global test utilities
@@ -21,6 +21,9 @@ global.testUtils = {
 
 // Clean up after tests
 afterAll(async () => {
+  // Restore console methods
+  jest.restoreAllMocks();
+  
   // Close any open handles
   await new Promise(resolve => setTimeout(resolve, 100));
 });

@@ -31,7 +31,7 @@ async function initDB() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
-    console.log('Database connected and table created');
+    console.warn('Database connected and table created'); // Use warn for infrastructure logs
     return db;
   } catch (error) {
     console.error('Database connection failed:', error);
@@ -147,7 +147,7 @@ const PORT = process.env.PORT || 3000;
 async function startServer() {
   await initDB();
   return app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.warn(`Server running on port ${PORT}`); // Use warn for server startup logs
   });
 }
 
